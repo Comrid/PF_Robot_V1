@@ -79,7 +79,7 @@ class Findee:
         self._oled_thread = threading.Thread(target=self._oled_loop, daemon=True)
         self._oled_thread.start()
 
-        atexit.register(self.cleanup)
+        atexit.register(self.__cleanup)
 
     def set_code_running(self, running: bool) -> None:
         """로봇 코드 실행 중이면 True. OLED 표정은 중단하고 기울기 시 배터리만 표시."""
@@ -315,8 +315,12 @@ class Findee:
         else:
             return 0
 
-    @debug_decorator
     def cleanup(self):
+        """사용자/블록 코드에서 호출 금지. 프로세스 종료 시 atexit에서만 __cleanup이 호출된다."""
+        print("This function must not be called by user anymore.")
+
+    def __cleanup(self):
+        """실제 정리. atexit에서만 호출되며 사용자는 호출할 수 없다."""
         if getattr(self, '_oled', None) is not None:
             try:
                 self._oled.clear(0)
@@ -343,5 +347,3 @@ class Findee:
         self._oled = None
         self._imu = None
         self._battery = None
-        # _instance/_initialized 는 리셋하지 않음. cleanup 후 Findee() 호출 시 같은 인스턴스가 반환되고
-        # stop() 등은 _motor is None 으로 no-op 되어 재초기화·닫힌 I2C 사용을 막음.

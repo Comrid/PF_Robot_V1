@@ -182,11 +182,11 @@ class _MotorUltrasonic:
                 except Exception:
                     pass
                 setattr(self, p, None)
-        # PWM 객체가 GC될 때 __del__이 호출되므로, GPIO.cleanup() 전에 gc로 수거해 두면
-        # lgpio 핸들이 유효한 상태에서 __del__이 실행되어 TypeError를 줄일 수 있음.
         gc.collect()
+        # GPIO.cleanup()을 호출하지 않음. 호출 시 lgpio 핸들이 무효화되어,
+        # 나중에 PWM 객체가 GC될 때 __del__ → stop()에서 TypeError가 난다.
+        # 핀만 LOW로 두고 프로세스 종료 시 OS가 정리하도록 함.
         try:
             GPIO.output((self.AIN1, self.AIN2, self.BIN1, self.BIN2, self.nSLEEP, self.TRIG), GPIO.LOW)
-            GPIO.cleanup()
         except Exception:
             pass
