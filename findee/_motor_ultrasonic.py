@@ -85,6 +85,8 @@ class _MotorUltrasonic:
                 pwm2.ChangeDutyCycle(duty)
 
     def control_motors(self, left: float, right: float, decay: str = "slow") -> None:
+        if self._pwm_ain1 is None or self._pwm_bin1 is None:
+            return
         def normalize(s: float) -> float:
             return (1 if s >= 0 else -1) * self.constrain(abs(s), 20, 100) if s != 0.0 else 0.0
         self._set_channel(normalize(right), self._pwm_ain1, self._pwm_ain2, decay)
@@ -92,10 +94,14 @@ class _MotorUltrasonic:
 
     @_debug_decorator
     def stop(self) -> None:
+        if self._pwm_ain1 is None:
+            return
         self.control_motors(0.0, 0.0)
 
     @_debug_decorator
     def force_stop(self) -> None:
+        if self._pwm_ain1 is None:
+            return
         self._pwm_ain1.ChangeDutyCycle(100)
         self._pwm_ain2.ChangeDutyCycle(100)
         self._pwm_bin1.ChangeDutyCycle(100)
@@ -176,6 +182,8 @@ class _MotorUltrasonic:
                 except Exception:
                     pass
                 setattr(self, p, None)
+        # PWM 객체가 GC될 때 __del__이 호출되므로, GPIO.cleanup() 전에 gc로 수거해 두면
+        # lgpio 핸들이 유효한 상태에서 __del__이 실행되어 TypeError를 줄일 수 있음.
         gc.collect()
         try:
             GPIO.output((self.AIN1, self.AIN2, self.BIN1, self.BIN2, self.nSLEEP, self.TRIG), GPIO.LOW)

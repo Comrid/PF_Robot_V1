@@ -188,11 +188,13 @@ class Findee:
 
     @debug_decorator
     def control_motors(self, left: float, right: float, decay: str = "slow") -> None:
-        self._motor.control_motors(left, right, decay)
+        if getattr(self, '_motor', None) is not None:
+            self._motor.control_motors(left, right, decay)
 
     @debug_decorator
     def stop(self):
-        self._motor.stop()
+        if getattr(self, '_motor', None) is not None:
+            self._motor.stop()
 
     @debug_decorator
     def force_stop(self):
@@ -230,14 +232,20 @@ class Findee:
 
     @debug_decorator
     def get_distance(self):
+        if getattr(self, '_motor', None) is None:
+            return -1.0
         return self._motor.get_distance()
 
     # --- 위임: 카메라 ---
     def get_frame(self):
+        if getattr(self, '_camera', None) is None:
+            return None
         return self._camera.get_frame()
 
     def mjpeg_gen(self):
-        return self._camera.mjpeg_gen()
+        if getattr(self, '_camera', None) is None:
+            return
+        yield from self._camera.mjpeg_gen()
 
     # --- Image Processing ---
     def mask_image(self, hsv_image, slider_values: list[int]):
@@ -309,8 +317,12 @@ class Findee:
 
     @debug_decorator
     def cleanup(self):
-        self._oled.clear(0)
-        self._oled.show()
+        if getattr(self, '_oled', None) is not None:
+            try:
+                self._oled.clear(0)
+                self._oled.show()
+            except Exception:
+                pass
         self._oled_stop = True
         if self._oled_thread is not None and self._oled_thread.is_alive():
             self._oled_thread.join(timeout=1.0)
@@ -324,8 +336,12 @@ class Findee:
             self._i2c = None
         if hasattr(self, '_motor') and self._motor is not None:
             self._motor.cleanup()
+            self._motor = None
         if hasattr(self, '_camera') and self._camera is not None:
             self._camera.cleanup()
-
-        Findee._instance = None
-        Findee._initialized = False
+            self._camera = None
+        self._oled = None
+        self._imu = None
+        self._battery = None
+        # _instance/_initialized 는 리셋하지 않음. cleanup 후 Findee() 호출 시 같은 인스턴스가 반환되고
+        # stop() 등은 _motor is None 으로 no-op 되어 재초기화·닫힌 I2C 사용을 막음.
