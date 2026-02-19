@@ -1,0 +1,10 @@
+flask
+flask-socketio
+python-socketio
+websocket-client
+numpy>=1.26.4
+psutil
+aiortc
+packaging
+opencv-python
+smbus2
