@@ -90,6 +90,8 @@ _REF_EYE_H, _REF_EYE_W = 40, 40
 _REF_SPACE = 10
 _REF_R = 10
 _CW, _CB = 1, 0
+# I2C 락 경합 시 show() 지연 보정: 프레임 간 최소 대기로 눈에 보이는 속도 유지
+_ANIM_FRAME_DELAY = 0.025
 
 
 def _safe_radius(r: int, w: int, h: int) -> int:
@@ -215,7 +217,7 @@ class _OLED:
             self.left.width += 3
             self.right.width += 3
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         for _ in range(3):
             self.left.height += speed
             self.right.height += speed
@@ -224,7 +226,7 @@ class _OLED:
             self.left.width -= 3
             self.right.width -= 3
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         self.reset_eyes()
 
     def sleep(self):
@@ -240,7 +242,7 @@ class _OLED:
             self.left.height = self.right.height = h
             self.corner_r = max(1, min((h-2)*(_REF_R-1)//(_REF_EYE_H-2)+1, h//2, _REF_R))
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
 
     def saccade(self, dx: int, dy: int):
         mx, my, bl = 8, 6, 8
@@ -253,7 +255,7 @@ class _OLED:
             self.left.height += dh
             self.right.height += dh
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
 
     def _draw_filled_triangle(self, x0: int, y0: int, x1: int, y1: int, x2: int, y2: int, color: int) -> None:
         """채운 삼각형 (draw_pixel만 사용)."""
@@ -298,7 +300,7 @@ class _OLED:
             )
             offset -= 2
             self.show()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         time.sleep(1.0)
         self.reset_eyes()
 
@@ -313,7 +315,7 @@ class _OLED:
             if direction > 0: self.right.height += ov; self.right.width += ov
             else: self.left.height += ov; self.left.width += ov
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         for _ in range(3):
             self.left.x += mv*direction
             self.right.x += mv*direction
@@ -322,7 +324,7 @@ class _OLED:
             if direction > 0: self.right.height += ov; self.right.width += ov
             else: self.left.height += ov; self.left.width += ov
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         time.sleep(1.0)
         for _ in range(3):
             self.left.x -= mv*direction
@@ -332,7 +334,7 @@ class _OLED:
             if direction > 0: self.right.height -= ov; self.right.width -= ov
             else: self.left.height -= ov; self.left.width -= ov
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         for _ in range(3):
             self.left.x -= mv*direction
             self.right.x -= mv*direction
@@ -341,7 +343,7 @@ class _OLED:
             if direction > 0: self.right.height -= ov; self.right.width -= ov
             else: self.left.height -= ov; self.left.width -= ov
             self.draw_frame()
-            time.sleep(0.001)
+            time.sleep(_ANIM_FRAME_DELAY)
         self.reset_eyes()
 
     def launch_animation(self, idx: int, block: bool = False):
@@ -370,9 +372,9 @@ class _OLED:
                     for _ in range(20):
                         dx, dy = random.randint(-1, 1), random.randint(-1, 1)
                         self.saccade(dx, dy)
-                        time.sleep(0.001)
+                        time.sleep(_ANIM_FRAME_DELAY)
                         self.saccade(-dx, -dy)
-                        time.sleep(0.001)
+                        time.sleep(_ANIM_FRAME_DELAY)
             except Exception:
                 pass
         if block:
