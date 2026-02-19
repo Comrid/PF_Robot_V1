@@ -23,6 +23,10 @@ import numpy as np
 
 USE_DEBUG = False
 
+# I2C bus 1 공유: OLED(0x3C), IMU(0x68), INA219(0x40). 동시 접근 시 트랜잭션 깨짐 방지.
+# RLock: 같은 스레드가 init() -> _cmd() 처럼 중첩 호출해도 deadlock 없음.
+_I2C_LOCK = threading.RLock()
+
 #region OLED
 OLED_ADDR = 0x3C
 OLED_WIDTH = 128
@@ -106,13 +110,15 @@ class _OLED:
         self.corner_r = _REF_R
 
     def _cmd(self, *args: int) -> None:
-        for c in args:
-            self._bus.write_byte_data(self._addr, _SSD1306_CMD, c)
+        with _I2C_LOCK:
+            for c in args:
+                self._bus.write_byte_data(self._addr, _SSD1306_CMD, c)
 
     def _data(self, data: bytes) -> None:
-        for i in range(0, len(data), 32):
-            block = data[i:i+32]
-            self._bus.write_i2c_block_data(self._addr, _SSD1306_DATA, list(block))
+        with _I2C_LOCK:
+            for i in range(0, len(data), 32):
+                block = data[i:i+32]
+                self._bus.write_i2c_block_data(self._addr, _SSD1306_DATA, list(block))
 
     def init(self) -> None:
         self._cmd(_SSD1306_DISPLAYOFF,_SSD1306_SETDISPLAYCLOCKDIV,0x80,_SSD1306_SETMULTIPLEX,0x3F,_SSD1306_SETDISPLAYOFFSET,0x00,_SSD1306_SETSTARTLINE|0x00,_SSD1306_CHARGEPUMP,_SSD1306_SWITCHCAPVCC,_SSD1306_MEMORYMODE,0x00,_SSD1306_SEGREMAP|0x01,_SSD1306_COMSCANDEC,_SSD1306_SETCOMPINS,0x12,_SSD1306_SETCONTRAST,0xCF,_SSD1306_SETPRECHARGE,0xF1,_SSD1306_SETVCOMDETECT,0x40,_SSD1306_DISPLAYALLON_RESUME,_SSD1306_NORMALDISPLAY,_SSD1306_DISPLAYON)
@@ -123,8 +129,9 @@ class _OLED:
             self._buf[i] = fill
 
     def show(self) -> None:
-        self._cmd(_SSD1306_COLUMNADDR,0,OLED_WIDTH-1,_SSD1306_PAGEADDR,0,OLED_PAGES-1)
-        self._data(bytes(self._buf))
+        with _I2C_LOCK:
+            self._cmd(_SSD1306_COLUMNADDR,0,OLED_WIDTH-1,_SSD1306_PAGEADDR,0,OLED_PAGES-1)
+            self._data(bytes(self._buf))
 
     def draw_pixel(self, x: int, y: int, color: int = 1) -> None:
         if 0 <= x < OLED_WIDTH and 0 <= y < OLED_HEIGHT:
@@ -410,14 +417,16 @@ class _IMU:
         self._read_thread = None
 
     def init(self) -> None:
-        self._bus.write_byte_data(self._addr, _REG_PWR, 0x00)
+        with _I2C_LOCK:
+            self._bus.write_byte_data(self._addr, _REG_PWR, 0x00)
         time.sleep(0.1)
-        self._bus.write_byte_data(self._addr, _REG_SMPLRT, 0x09)
-        self._bus.write_byte_data(self._addr, _REG_CFG, 0x03)
-        self._bus.write_byte_data(self._addr, _REG_GYRO_CFG, 0x00)
-        self._bus.write_byte_data(self._addr, _REG_ACCEL_CFG, 0x00)
-        self._bus.write_byte_data(self._addr, _REG_INT_PIN_CFG, 0x80)
-        self._bus.write_byte_data(self._addr, _REG_INT_ENABLE, 0x01)
+        with _I2C_LOCK:
+            self._bus.write_byte_data(self._addr, _REG_SMPLRT, 0x09)
+            self._bus.write_byte_data(self._addr, _REG_CFG, 0x03)
+            self._bus.write_byte_data(self._addr, _REG_GYRO_CFG, 0x00)
+            self._bus.write_byte_data(self._addr, _REG_ACCEL_CFG, 0x00)
+            self._bus.write_byte_data(self._addr, _REG_INT_PIN_CFG, 0x80)
+            self._bus.write_byte_data(self._addr, _REG_INT_ENABLE, 0x01)
         self._last_ts = time.monotonic()
         self._q = [1.0, 0.0, 0.0, 0.0]
         self._last_gyro_rad = None
@@ -469,7 +478,8 @@ class _IMU:
         return v - 65536 if v >= 32768 else v
 
     def _read_block(self):
-        return self._bus.read_i2c_block_data(self._addr, _REG_ACCEL_XOUT_H, 14)
+        with _I2C_LOCK:
+            return self._bus.read_i2c_block_data(self._addr, _REG_ACCEL_XOUT_H, 14)
 
     def get_raw_data(self):
         b = self._read_block()
@@ -593,10 +603,12 @@ class _Battery:
         self._w16(_INA_REG_CAL, self._cal)
 
     def _w16(self, reg: int, val: int) -> None:
-        self._bus.write_i2c_block_data(self._addr, reg, [(val>>8)&0xFF, val&0xFF])
+        with _I2C_LOCK:
+            self._bus.write_i2c_block_data(self._addr, reg, [(val>>8)&0xFF, val&0xFF])
 
     def _r16(self, reg: int) -> int:
-        d = self._bus.read_i2c_block_data(self._addr, reg, 2)
+        with _I2C_LOCK:
+            d = self._bus.read_i2c_block_data(self._addr, reg, 2)
         return (d[0]<<8)|d[1]
 
     def voltage(self) -> float:
