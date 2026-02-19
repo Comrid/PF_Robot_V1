@@ -99,7 +99,7 @@ class Findee:
         return max(0.0, min(100.0, pct))
 
     def _oled_loop(self) -> None:
-        """OLED: 코드 미실행 시 표정 랜덤 반복. roll>=70° 0.5초 유지 시 배터리 정보 표시."""
+        """OLED: 기울기 유지 시 배터리 정보(코드 실행 중에도 갱신). 그 외엔 코드 미실행 시에만 표정/상태 문구."""
         if self._i2c is None or not hasattr(self, '_oled'):
             return
         high_roll_start = None
@@ -113,8 +113,6 @@ class Findee:
 
         while not getattr(self, '_oled_stop', True):
             time.sleep(0.01)
-            if self._code_running:
-                continue
             try:
                 roll, _, _ = self._imu.get_rpy()
             except Exception:
@@ -127,7 +125,9 @@ class Findee:
             else:
                 high_roll_start = None
                 showing_battery = False
+
             if showing_battery:
+                # 배터리 정보는 코드 실행 중에도 갱신 (모터 전류 등 확인 가능)
                 now = time.monotonic()
                 if now - last_battery_draw >= 0.1:
                     last_battery_draw = now
@@ -149,7 +149,8 @@ class Findee:
                     self._oled.draw_text(f"CPU: {cpu_pct} %", 0, LINE_SPACING * 3)
                     self._oled.draw_text(f"R:{r:.1f} P:{p:.1f} Y:{y:.1f}", 0, LINE_SPACING * 4)
                     self._oled.show()
-            else:
+            elif not self._code_running:
+                # 표정/상태 문구는 코드 미실행 시에만
                 status = getattr(self, '_oled_status', '')
                 if status:
                     now = time.monotonic()
