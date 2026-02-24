@@ -7,7 +7,7 @@ import threading
 import time
 
 # OLED first: init and start buffering before heavy imports
-from findee._oled_shared import init_early, start_buffering_animation, stop_buffering_animation
+from findee._oled_shared import init_early, start_buffering_animation
 
 init_early()
 start_buffering_animation()
@@ -43,7 +43,6 @@ def main() -> None:
 
     sio.connect(SERVER_URL)
 
-    stop_buffering_animation()
     findee = Findee()
     state.findee = findee
 

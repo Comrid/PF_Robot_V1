@@ -16,7 +16,7 @@ os.environ['LIBCAMERA_LOG_FILE'] = '/dev/null'
 from findee._i2c_bus import get_i2c_bus
 from findee._module_status import ModuleStatus
 from findee._oled import _OLED, _Animation
-from findee._oled_shared import get_shared_oled
+from findee._oled_shared import get_shared_oled, stop_buffering_animation
 from findee._imu import _IMU
 from findee._battery import _Battery
 from findee._camera import _Camera
@@ -123,6 +123,7 @@ class Findee:
                 pass
             time.sleep(ULTRASONIC_PROBE_INTERVAL_S)
 
+        stop_buffering_animation()
         self._oled_thread = threading.Thread(target=self._oled_loop, daemon=True)
         self._oled_thread.start()
 
