@@ -16,6 +16,7 @@ os.environ['LIBCAMERA_LOG_FILE'] = '/dev/null'
 from findee._i2c_bus import get_i2c_bus
 from findee._module_status import ModuleStatus
 from findee._oled import _OLED, _Animation
+from findee._oled_shared import get_shared_oled
 from findee._imu import _IMU
 from findee._battery import _Battery
 from findee._camera import _Camera
@@ -78,14 +79,20 @@ class Findee:
             pass
 
         if self._i2c is not None:
-            self._oled = _OLED(self._i2c)
-            try:
-                self._oled.init()
-                self._oled.clear(0)
+            self._oled = get_shared_oled()
+            if self._oled is not None:
+                self._oled_is_shared = True
                 self._module_status.oled = True
-            except Exception:
-                self._oled = None
-                self._module_status.oled = False
+            else:
+                self._oled_is_shared = False
+                self._oled = _OLED(self._i2c)
+                try:
+                    self._oled.init()
+                    self._oled.clear(0)
+                    self._module_status.oled = True
+                except Exception:
+                    self._oled = None
+                    self._module_status.oled = False
 
             self._imu = _IMU(self._i2c)
             try:
@@ -367,7 +374,7 @@ class Findee:
 
     def __cleanup(self):
         """실제 정리. atexit에서만 호출되며 사용자는 호출할 수 없다."""
-        if getattr(self, '_oled', None) is not None:
+        if getattr(self, '_oled', None) is not None and not getattr(self, '_oled_is_shared', False):
             try:
                 self._oled.clear(0)
                 self._oled.show()

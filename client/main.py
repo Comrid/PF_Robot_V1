@@ -10,14 +10,25 @@ import socketio
 
 from config.robot_config import ROBOT_ID, ROBOT_NAME, SERVER_URL
 from findee import Findee
+from findee._oled_shared import init_early, get_shared_oled
 from client.state import state
 from client import webrtc
 from client import socket_events
 
 
 def main() -> None:
+    oled = init_early() or get_shared_oled(init_if_missing=True)
+    if oled is not None:
+        try:
+            oled.clear(0)
+            oled.draw_text("Booting...", 0, 0)
+            oled.show()
+        except Exception:
+            pass
+    time.sleep(0.2)
+
     findee = Findee()
-    findee.set_oled_status("Booting...")
+    findee.set_oled_status("WebRTC Starting...")
     time.sleep(0.5)
 
     state.findee = findee
@@ -36,7 +47,6 @@ def main() -> None:
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    findee.set_oled_status("WebRTC Starting...")
     webrtc_thread = threading.Thread(target=webrtc.start_webrtc_loop, daemon=True)
     webrtc_thread.start()
     sio.connect(SERVER_URL)

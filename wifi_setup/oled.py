@@ -1,8 +1,10 @@
-"""OLED QR/scroll using findee.v1._OLED (V1 only)."""
+"""OLED QR/scroll using findee 공용 OLED (V1 only)."""
 from __future__ import annotations
 
 import threading
 import time
+
+from findee._oled_shared import get_shared_oled
 
 _oled = None
 _oled_scroll_stop = False
@@ -36,17 +38,13 @@ _QR_10_0_0_1 = (
 
 
 def _init_oled() -> bool:
-    """Initialize OLED with findee.v1._OLED. Returns True on success."""
+    """공용 OLED 사용. 없으면 초기화 후 True/False 반환."""
     global _oled
     if _oled is not None:
         return True
     try:
-        import smbus2
-        from findee.v1 import _OLED
-        bus = smbus2.SMBus(1)
-        _oled = _OLED(bus)
-        _oled.init()
-        return True
+        _oled = get_shared_oled(init_if_missing=True)
+        return _oled is not None
     except Exception:
         return False
 
