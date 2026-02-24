@@ -56,6 +56,10 @@ def register(sio):
     @sio.event
     def execute_code(data):
         try:
+            if state.findee is None:
+                session_id = data.get("session_id", "")
+                sio.emit("robot_stderr", {"session_id": session_id, "output": "로봇 초기화 중입니다."})
+                return
             code = data.get("code", "")
             session_id = data.get("session_id", "")
             if session_id in executor.session_threads:
@@ -74,6 +78,8 @@ def register(sio):
     @sio.event
     def stop_execution(data):
         try:
+            if state.findee is None:
+                return
             session_id = data.get("session_id", "")
             if session_id not in executor.session_threads:
                 sio.emit("robot_stderr", {"session_id": session_id, "output": "실행 중인 코드가 없습니다."})
@@ -96,6 +102,10 @@ def register(sio):
             if not session_id:
                 return
             findee = state.findee
+            if findee is None:
+                sio.emit("robot_emit_text", {"session_id": session_id, "text": "-", "widget_id": "ultrasonic"})
+                sio.emit("robot_emit_text", {"session_id": session_id, "text": "0", "widget_id": "battery"})
+                return
             dist = findee.get_distance() if findee else None
             if dist is None:
                 dist = -1
