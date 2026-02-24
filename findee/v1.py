@@ -123,7 +123,6 @@ class Findee:
                 pass
             time.sleep(ULTRASONIC_PROBE_INTERVAL_S)
 
-        time.sleep(5)
         self._oled_thread = threading.Thread(target=self._oled_loop, daemon=True)
         self._oled_thread.start()
 
