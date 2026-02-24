@@ -14,20 +14,25 @@ _buffering_stop = False
 _buffering_thread: Optional[threading.Thread] = None
 
 NUM_DOTS = 12
+TRAIL_LEN = 5
 CENTER_X, CENTER_Y = 64, 32
 RADIUS = 22
-BRIGHT_LEAD = 3
-DIM_LEAD = 2
+# 크기: 0=3x3, 1=2x2, 2=1픽셀. 앞(방금 켜짐)이 크고 뒤로 갈수록 작게.
+TRAIL_SIZES = (0, 1, 1, 2, 2)
 
 
-def _draw_dot(oled: _OLED, x: int, y: int, bright: bool) -> None:
-    """Draw a dot at (x,y). bright=True: 2x2 block, else 1 pixel."""
-    if bright:
-        for dx in (0, 1):
-            for dy in (0, 1):
-                oled.draw_pixel(x + dx, y + dy, 1)
+def _draw_dot_size(oled: _OLED, cx: int, cy: int, size: int) -> None:
+    """원 위 점 중심 (cx,cy)에 크기 size로 그리기. 0=3x3, 1=2x2, 2=1픽셀. 모두 중심 기준."""
+    if size == 0:
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                oled.draw_pixel(cx + dx, cy + dy, 1)
+    elif size == 1:
+        for dx in (0, -1):
+            for dy in (0, -1):
+                oled.draw_pixel(cx + dx, cy + dy, 1)
     else:
-        oled.draw_pixel(x, y, 1)
+        oled.draw_pixel(cx, cy, 1)
 
 
 def _buffering_loop() -> None:
@@ -39,15 +44,14 @@ def _buffering_loop() -> None:
     while not _buffering_stop:
         try:
             oled.clear(0)
-            for i in range(NUM_DOTS):
-                angle = (i / NUM_DOTS) * 2 * math.pi - (step / NUM_DOTS) * 2 * math.pi
-                x = int(CENTER_X + RADIUS * math.cos(angle))
-                y = int(CENTER_Y + RADIUS * math.sin(angle))
-                pos = (i - step) % NUM_DOTS
-                if pos < BRIGHT_LEAD:
-                    _draw_dot(oled, x, y, bright=True)
-                elif pos < BRIGHT_LEAD + DIM_LEAD:
-                    _draw_dot(oled, x, y, bright=False)
+            # 시계 방향: head가 한 칸씩 이동. head = (-step) % 12 이면 0→11→10→… 로 시계방향
+            head = (-step) % NUM_DOTS
+            for k in range(TRAIL_LEN):
+                pos = (head + k) % NUM_DOTS
+                angle = (pos / NUM_DOTS) * 2 * math.pi
+                cx = int(CENTER_X + RADIUS * math.cos(angle))
+                cy = int(CENTER_Y + RADIUS * math.sin(angle))
+                _draw_dot_size(oled, cx, cy, TRAIL_SIZES[k])
             oled.show()
             step += 1
             time.sleep(0.08)
