@@ -14,19 +14,27 @@ class _Camera:
         self.config = None
 
     def init(self) -> None:
-        self.camera = Picamera2()
-        self.config = self.camera.create_video_configuration(
-            main={"size": (640, 480), "format": "RGB888"},
-            controls={"FrameDurationLimits": (33333, 33333)},
-            queue=False, buffer_count=2
-        )
-        self.camera.configure(self.config)
-        self.camera.start()
+        try:
+            self.camera = Picamera2()
+            self.config = self.camera.create_video_configuration(
+                main={"size": (640, 480), "format": "RGB888"},
+                controls={"FrameDurationLimits": (33333, 33333)},
+                queue=False, buffer_count=2
+            )
+            self.camera.configure(self.config)
+            self.camera.start()
+        except Exception:
+            self.camera = None
+            self.config = None
 
     def get_frame(self):
+        if self.camera is None:
+            return None
         return self.camera.capture_array("main").copy()
 
     def mjpeg_gen(self):
+        if self.camera is None:
+            return
         while True:
             arr = self.camera.capture_array("main").copy()
             ok, buf = cv2.imencode('.jpg', arr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])

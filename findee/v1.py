@@ -14,11 +14,15 @@ logging.getLogger('picamera2').setLevel(logging.ERROR)
 os.environ['LIBCAMERA_LOG_FILE'] = '/dev/null'
 
 from findee._i2c_bus import get_i2c_bus
+from findee._module_status import ModuleStatus
 from findee._oled import _OLED, _Animation
 from findee._imu import _IMU
 from findee._battery import _Battery
 from findee._camera import _Camera
 from findee._motor_ultrasonic import _MotorUltrasonic
+
+ULTRASONIC_PROBE_COUNT = 5
+ULTRASONIC_PROBE_INTERVAL_S = 0.1
 
 USE_DEBUG = False
 
@@ -51,29 +55,66 @@ class Findee:
             return
         self._initialized = True
 
-        self._motor = _MotorUltrasonic()
-        self._motor.gpio_init()
-        self._camera = _Camera()
-        self._camera.init()
-
+        self._module_status = ModuleStatus()
         self._code_running = False
         self._oled_stop = False
         self._oled_thread = None
         self._oled_status = ""
 
-        self._i2c = get_i2c_bus()
-        self._oled = _OLED(self._i2c)
-        self._imu = _IMU(self._i2c)
-        self._battery = _Battery(self._i2c)
+        self._motor = _MotorUltrasonic()
+        self._motor.gpio_init()
 
-        self._oled.init()
-        self._oled.clear(0)
+        self._camera = _Camera()
+        self._camera.init()
+        self._module_status.camera = getattr(self._camera, "camera", None) is not None
 
-        self._imu.init()
-        self._imu.calibrate()
-        self._imu.start()
+        self._i2c = None
+        self._oled = None
+        self._imu = None
+        self._battery = None
+        try:
+            self._i2c = get_i2c_bus()
+        except Exception:
+            pass
 
-        self._battery.init()
+        if self._i2c is not None:
+            self._oled = _OLED(self._i2c)
+            try:
+                self._oled.init()
+                self._oled.clear(0)
+                self._module_status.oled = True
+            except Exception:
+                self._oled = None
+                self._module_status.oled = False
+
+            self._imu = _IMU(self._i2c)
+            try:
+                self._imu.init()
+                self._imu.calibrate()
+                self._imu.start()
+                self._module_status.imu = True
+            except Exception:
+                self._imu = None
+                self._module_status.imu = False
+
+            self._battery = _Battery(self._i2c)
+            try:
+                self._battery.init()
+                self._module_status.battery = True
+            except Exception:
+                self._battery = None
+                self._module_status.battery = False
+
+        self._module_status.ultrasonic = False
+        for _ in range(ULTRASONIC_PROBE_COUNT):
+            try:
+                d = self._motor.get_distance()
+                if d is not None and d >= 0:
+                    self._module_status.ultrasonic = True
+                    break
+            except Exception:
+                pass
+            time.sleep(ULTRASONIC_PROBE_INTERVAL_S)
 
         time.sleep(5)
         self._oled_thread = threading.Thread(target=self._oled_loop, daemon=True)
@@ -84,6 +125,10 @@ class Findee:
     def set_code_running(self, running: bool) -> None:
         """로봇 코드 실행 중이면 True. OLED 표정은 중단하고 기울기 시 배터리만 표시."""
         self._code_running = running
+
+    def get_module_status(self) -> ModuleStatus:
+        """로봇 부착 모듈 상태. 서버 모니터링용."""
+        return self._module_status
 
     def get_oled(self):
         """블록코딩/사용자 코드에서 OLED·표정 제어용. clear, draw_text, show, launch_animation 등 사용."""
@@ -100,7 +145,7 @@ class Findee:
 
     def _oled_loop(self) -> None:
         """OLED: 기울기 유지 시 배터리 정보(코드 실행 중에도 갱신). 그 외엔 코드 미실행 시에만 표정/상태 문구."""
-        if self._i2c is None or not hasattr(self, '_oled'):
+        if self._i2c is None or getattr(self, '_oled', None) is None:
             return
         high_roll_start = None
         showing_battery = False
