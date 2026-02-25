@@ -84,7 +84,7 @@ def _draw_qr_screen(oled) -> None:
                 for dj in range(scale):
                     oled.draw_pixel(x_off + j * scale + dj, y_off + i * scale + di, pixel)
     # 왼쪽 텍스트 (3줄)
-    left_lines = ["Connect", "Setup Browser !", "->"]
+    left_lines = ["Connect", "Setup !", "->"]
     y_start = (64 - (len(left_lines) - 1) * LINE_SPACING - FONT_H) // 2
     for i, s in enumerate(left_lines):
         oled.draw_text(s, 0, y_start + i * LINE_SPACING)
