@@ -51,7 +51,7 @@ def _init_oled() -> bool:
 
 def _draw_qr_and_static_text(oled, line_y_positions, static_lines, scroll_line, scroll_x):
     W, H = 21, 21
-    scale = 3
+    scale = 2  # 1/2 of previous (was 3 → 63px; now 42px). Check camera scan.
     out_w, out_h = W * scale, H * scale
     x_off = 128 - out_w
     y_off = (64 - out_h) // 2
