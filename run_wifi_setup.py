@@ -1,4 +1,9 @@
-"""Entry point: run WiFi setup Flask app."""
+"""Entry point: run WiFi setup Flask app. OLED 버퍼링을 먼저 켠 뒤 앱 로드."""
+from findee._oled_shared import init_early, start_buffering_animation
+
+init_early()
+start_buffering_animation()
+
 from wifi_setup.app import app
 
 if __name__ == "__main__":

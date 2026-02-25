@@ -4,7 +4,7 @@ from __future__ import annotations
 import threading
 import time
 
-from findee._oled_shared import get_shared_oled
+from findee._oled_shared import get_shared_oled, stop_buffering_animation
 
 _oled = None
 _oled_scroll_stop = False
@@ -105,8 +105,9 @@ def _oled_scroll_loop(get_robot_name_fn):
 
 
 def show_qr_on_oled(get_robot_name_fn):
-    """Show QR and scroll text on OLED. V1 only; always use OLED when available."""
+    """Show QR and scroll text on OLED. 버퍼링 중지 후 와이파이 셋업 문구 표시."""
     global _oled_scroll_stop
+    stop_buffering_animation()
     if _oled is None and not _init_oled():
         return
     if _oled is None:
