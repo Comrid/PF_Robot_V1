@@ -1,4 +1,4 @@
-"""OLED QR + 고정 텍스트 (와이파이 셋업) using findee 공용 OLED (V1 only)."""
+"""OLED 와이파이 셋업: 화면1(와이파이 정보) / 화면2(QR). 연결된 기기 유무로 전환."""
 from __future__ import annotations
 
 import threading
@@ -6,11 +6,14 @@ import time
 
 from findee._oled_shared import get_shared_oled, stop_buffering_animation
 
+from wifi_setup.client_check import has_connected_client
+
 _oled = None
-_oled_scroll_stop = False
+_oled_stop = False
 CHAR_WIDTH = 6
-# QR 오른쪽 붙임 시 왼쪽 텍스트 영역 (128 - 42 = 86, 여유 2)
-TEXT_AREA_WIDTH = 84
+LINE_SPACING = 10
+FONT_H = 8
+POLL_INTERVAL = 3  # 연결 감지 주기 (초)
 
 # http://10.0.0.1 QR 21x21 (1=검정, 0=흰색)
 _QR_10_0_0_1 = (
@@ -50,11 +53,27 @@ def _init_oled() -> bool:
         return False
 
 
-def _draw_qr_and_static_text(oled, line_y_positions, static_lines, wifi_name_line, wifi_name_x):
+def _draw_wifi_info_screen(oled, robot_name: str) -> None:
+    """화면1: QR 없이 Wi-Fi / Name / PW 만 표시."""
+    oled.clear(0)
+    y_start = 4
+    lines = [
+        "Wi-Fi",
+        "Name:",
+        f"PF_Kit_Wifi({robot_name})"[:21],  # 화면 너비 내
+        "PW:",
+        "12345678",
+    ]
+    for i, s in enumerate(lines):
+        oled.draw_text(s, 0, y_start + i * LINE_SPACING)
+    oled.show()
+
+
+def _draw_qr_screen(oled) -> None:
+    """화면2: QR(scale=3, 오른쪽 아래) + 왼쪽에 Connect / Setup Browser ! / 화살표."""
     W, H = 21, 21
-    scale = 2  # 1/2 of previous (was 3 → 63px; now 42px). Check camera scan.
+    scale = 3
     out_w, out_h = W * scale, H * scale
-    # QR: 오른쪽 아래로 붙임
     x_off = 128 - out_w
     y_off = 64 - out_h
     oled.clear(0)
@@ -64,58 +83,47 @@ def _draw_qr_and_static_text(oled, line_y_positions, static_lines, wifi_name_lin
             for di in range(scale):
                 for dj in range(scale):
                     oled.draw_pixel(x_off + j * scale + dj, y_off + i * scale + di, pixel)
-    for i in (0, 1, 3, 4):
-        oled.draw_text(static_lines[i], 0, line_y_positions[i])
-    oled.draw_text(wifi_name_line, wifi_name_x, line_y_positions[2])
+    # 왼쪽 텍스트 (3줄)
+    left_lines = ["Connect", "Setup Browser !", "->"]
+    y_start = (64 - (len(left_lines) - 1) * LINE_SPACING - FONT_H) // 2
+    for i, s in enumerate(left_lines):
+        oled.draw_text(s, 0, y_start + i * LINE_SPACING)
     oled.show()
 
 
-def _oled_scroll_loop(get_robot_name_fn):
-    global _oled_scroll_stop
+def _oled_loop(get_robot_name_fn):
+    """연결 유무 폴링 → 화면1(정보) / 화면2(QR) 전환."""
+    global _oled_stop
     if _oled is None:
         return
-    try:
-        robot_name = get_robot_name_fn()
-    except Exception:
-        robot_name = ""
-    # 와이파이 아이디 고정 표시 (이동 없음). 길면 영역 안에 맞게 잘라서 표시
-    raw_line = f"PF_Kit_Wifi({robot_name})"
-    max_chars = TEXT_AREA_WIDTH // CHAR_WIDTH
-    wifi_name_line = raw_line[:max_chars] if len(raw_line) > max_chars else raw_line
-    LINE_SPACING = 10
-    FONT_H = 8
-    num_lines = 6
-    text_block_h = (num_lines - 1) * LINE_SPACING + FONT_H
-    text_y_start = (64 - text_block_h) // 2
-    line_y_positions = [text_y_start + i * LINE_SPACING for i in range(num_lines)]
-    static_lines = [
-        "Wifi Setup!",
-        "Connect:",
-        "",
-        "PW:",
-        "12345678",
-    ]
-    while not _oled_scroll_stop:
+    while not _oled_stop:
         try:
-            if _oled_scroll_stop or _oled is None:
+            if _oled_stop or _oled is None:
                 return
-            _draw_qr_and_static_text(_oled, line_y_positions, static_lines, wifi_name_line, 0)
-            time.sleep(1.0)
+            try:
+                robot_name = get_robot_name_fn() or ""
+            except Exception:
+                robot_name = ""
+            if has_connected_client():
+                _draw_qr_screen(_oled)
+            else:
+                _draw_wifi_info_screen(_oled, robot_name)
         except Exception:
             pass
+        time.sleep(POLL_INTERVAL)
 
 
 def show_qr_on_oled(get_robot_name_fn):
-    """Show QR(오른쪽 아래) + 고정 와이파이 문구 on OLED. 버퍼링 중지 후 와이파이 셋업 표시."""
-    global _oled_scroll_stop
+    """와이파이 셋업 OLED 시작: 기본은 화면1(와이파이 정보), 연결 시 화면2(QR)로 전환."""
+    global _oled_stop
     stop_buffering_animation()
     if _oled is None and not _init_oled():
         return
     if _oled is None:
         return
     try:
-        _oled_scroll_stop = False
-        t = threading.Thread(target=_oled_scroll_loop, args=(get_robot_name_fn,), daemon=True)
+        _oled_stop = False
+        t = threading.Thread(target=_oled_loop, args=(get_robot_name_fn,), daemon=True)
         t.start()
     except Exception:
         pass
