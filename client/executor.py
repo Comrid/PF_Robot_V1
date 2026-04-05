@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ctypes
 import threading
+import time
 from traceback import format_exc
 
 import cv2
@@ -109,10 +110,38 @@ def exec_code(code, session_id):
 
         @_check
         def load_model():
-            """딥러닝 위젯: 드롭다운에서 고른 모델을 브라우저(TF.js)로 불러오라고 요청."""
+            """딥러닝 위젯: 웹(TF.js)에서 모델 로드가 끝날 때까지 대기 후 다음 코드 진행."""
             sio = state.sio
-            if sio:
+            if not sio:
+                realtime_print("load_model: 소켓 없음")
+                return
+            ev = widget_data.prepare_dl_load_wait(session_id)
+            if ev is None:
+                realtime_print("load_model: session_id 없음")
+                return
+            try:
                 sio.emit("request_dl_widget_load", {"session_id": session_id})
+                deadline = time.time() + 180.0
+                while time.time() < deadline:
+                    if session_id in session_threads and session_threads[session_id].stop_flag:
+                        widget_data.complete_dl_load(session_id, False, "stopped")
+                        realtime_print("load_model: 실행 중지됨")
+                        return
+                    if ev.wait(timeout=0.25):
+                        break
+                else:
+                    realtime_print(
+                        "load_model: 시간 초과(180초) — 파이썬 웹 에디터 탭·모델 선택·네트워크를 확인하세요."
+                    )
+                    return
+                res = widget_data.consume_dl_load_result(session_id)
+                if res.get("success"):
+                    realtime_print("load_model: 웹에서 모델 로드 완료")
+                else:
+                    err = res.get("error") or "알 수 없는 오류"
+                    realtime_print(f"load_model 실패: {err}")
+            finally:
+                widget_data.clear_dl_load_wait(session_id)
 
         @_check
         def predict_dl(image):

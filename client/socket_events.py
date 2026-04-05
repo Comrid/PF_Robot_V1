@@ -1,4 +1,4 @@
-"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, client_update/reset, save_dl_model, dl_models_manage."""
+"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, dl_widget_load_ack, client_update/reset, save_dl_model, dl_models_manage."""
 from __future__ import annotations
 
 import base64
@@ -149,6 +149,13 @@ def register(sio):
     @sio.event
     def webrtc_ice_candidate(data):
         webrtc.enqueue_ice_candidate(data)
+
+    @sio.event
+    def dl_widget_load_ack(data):
+        """서버가 브라우저 TF.js 모델 로드 결과를 중계."""
+        payload = data or {}
+        sid = str(payload.get("session_id", "") or "")
+        widget_data.complete_dl_load(sid, bool(payload.get("success")), str(payload.get("error") or ""))
 
     @sio.event
     def client_update(data):
