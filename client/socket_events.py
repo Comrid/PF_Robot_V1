@@ -1,9 +1,11 @@
-"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, client_update/reset."""
+"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, client_update/reset, save_dl_model."""
 from __future__ import annotations
 
+import base64
 import subprocess
 import threading
 import time
+from pathlib import Path
 
 from config.robot_config import ROBOT_ID, ROBOT_NAME, SERVER_URL, ROBOT_VERSION
 from client.state import state
@@ -178,3 +180,36 @@ def register(sio):
             findee.set_oled_status("Reset Complete!")
         time.sleep(1.5)
         subprocess.Popen(["sudo", "reboot"])
+
+    @sio.event
+    def save_dl_model(data):
+        """서버에서 전달: models/<model_name>/{model.json, model.weights.bin, manifest.json}"""
+        payload = data or {}
+        request_id = payload.get("request_id", "")
+        model_name = (payload.get("model_name") or "model").strip() or "model"
+        files = payload.get("files") or []
+        try:
+            repo_root = Path(__file__).resolve().parents[1]
+            models_root = repo_root / "models"
+            target_dir = models_root / model_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            for f in files:
+                name = f.get("name")
+                b64 = f.get("content_b64")
+                if not name or b64 is None:
+                    continue
+                raw = base64.b64decode(b64)
+                (target_dir / name).write_bytes(raw)
+            sio.emit(
+                "dl_model_save_done",
+                {"request_id": request_id, "success": True, "path": str(target_dir)},
+            )
+        except Exception as e:
+            sio.emit(
+                "dl_model_save_done",
+                {
+                    "request_id": request_id,
+                    "success": False,
+                    "error": str(e),
+                },
+            )

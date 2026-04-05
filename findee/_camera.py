@@ -14,6 +14,9 @@ class _Camera:
         self.config = None
 
     def init(self) -> None:
+        """이미 열린 카메라가 있으면 재초기화하지 않는다. 중복 Picamera2()는 장치 점유 실패로 camera=None이 되어 get_frame이 망가질 수 있음."""
+        if self.camera is not None:
+            return
         try:
             self.camera = Picamera2()
             self.config = self.camera.create_video_configuration(
