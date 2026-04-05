@@ -107,6 +107,18 @@ def exec_code(code, session_id):
                 ErrCode.WRTC_TEXT_IO,
             )
 
+        @_check
+        def load_model():
+            """딥러닝 위젯: 드롭다운에서 고른 모델을 브라우저(TF.js)로 불러오라고 요청."""
+            sio = state.sio
+            if sio:
+                sio.emit("request_dl_widget_load", {"session_id": session_id})
+
+        @_check
+        def predict_dl(image):
+            """딥러닝 위젯: 프레임을 WebRTC로 웹에 보내 비동기 추론 후 결과가 갱신됨."""
+            emit_image(image, "deeplearningWidget")
+
         exec_namespace = {
             "Findee": Findee,
             "emit_image": emit_image,
@@ -115,6 +127,10 @@ def exec_code(code, session_id):
             "get_pid": widget_data.get_pid,
             "get_slider": widget_data.get_slider,
             "get_command": lambda: widget_data.get_command(session_id),
+            "load_model": load_model,
+            "predict_dl": predict_dl,
+            "get_dl_inference_result": lambda: widget_data.get_dl_inference_result(session_id),
+            "get_dl_class_extremes": lambda: widget_data.get_dl_class_extremes(session_id),
         }
         compiled_code = compile(code, "<string>", "exec")
         exec(compiled_code, exec_namespace)

@@ -1,4 +1,4 @@
-"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, client_update/reset, save_dl_model."""
+"""Socket.IO event registration: connect, disconnect, execute_code, stop, request_sensor_data, pid/slider, webrtc, client_update/reset, save_dl_model, dl_models_manage."""
 from __future__ import annotations
 
 import base64
@@ -9,6 +9,7 @@ from pathlib import Path
 
 from config.robot_config import ROBOT_ID, ROBOT_NAME, SERVER_URL, ROBOT_VERSION
 from client.state import state
+from client import dl_models_index as dli
 from client import executor
 from client import webrtc
 from client import updater
@@ -200,6 +201,11 @@ def register(sio):
                     continue
                 raw = base64.b64decode(b64)
                 (target_dir / name).write_bytes(raw)
+            reg = payload.get("registry_entry")
+            if isinstance(reg, dict):
+                dli.upsert_entry(model_name, reg)
+            else:
+                dli.upsert_minimal_from_manifest(model_name)
             sio.emit(
                 "dl_model_save_done",
                 {"request_id": request_id, "success": True, "path": str(target_dir)},
@@ -212,4 +218,101 @@ def register(sio):
                     "success": False,
                     "error": str(e),
                 },
+            )
+
+    @sio.event
+    def dl_models_manage(data):
+        """목록·이름/메모 수정·삭제 — 서버 HTTP가 relay."""
+        payload = data or {}
+        request_id = payload.get("request_id", "")
+        op = (payload.get("op") or "").strip()
+        try:
+            if op == "list":
+                idx = dli.load_index()
+                idx = dli.sync_orphan_folders(idx)
+                sio.emit(
+                    "dl_models_manage_done",
+                    {"request_id": request_id, "success": True, "index": idx},
+                )
+            elif op == "update":
+                ok = dli.update_entry(
+                    payload.get("folder", ""),
+                    payload.get("display_name"),
+                    payload.get("memo"),
+                )
+                if ok:
+                    sio.emit(
+                        "dl_models_manage_done",
+                        {"request_id": request_id, "success": True},
+                    )
+                else:
+                    sio.emit(
+                        "dl_models_manage_done",
+                        {
+                            "request_id": request_id,
+                            "success": False,
+                            "error": "모델을 찾을 수 없습니다.",
+                        },
+                    )
+            elif op == "delete":
+                dli.delete_folder_and_entry(payload.get("folder", ""))
+                sio.emit(
+                    "dl_models_manage_done",
+                    {"request_id": request_id, "success": True},
+                )
+            else:
+                sio.emit(
+                    "dl_models_manage_done",
+                    {
+                        "request_id": request_id,
+                        "success": False,
+                        "error": f"알 수 없는 op: {op}",
+                    },
+                )
+        except Exception as e:
+            sio.emit(
+                "dl_models_manage_done",
+                {"request_id": request_id, "success": False, "error": str(e)},
+            )
+
+    @sio.event
+    def dl_model_fetch(data):
+        """에디터 딥러닝 위젯: models/<folder>/ 파일을 base64로 반환."""
+        payload = data or {}
+        request_id = payload.get("request_id", "")
+        folder = dli.sanitize_folder(payload.get("folder", ""))
+        try:
+            target = dli.models_root() / folder
+            if not target.is_dir():
+                sio.emit(
+                    "dl_model_fetch_done",
+                    {"request_id": request_id, "success": False, "error": "모델 폴더 없음"},
+                )
+                return
+            files_out = []
+            for name in ("model.json", "model.weights.bin", "manifest.json"):
+                p = target / name
+                if p.exists():
+                    raw = p.read_bytes()
+                    files_out.append(
+                        {"name": name, "content_b64": base64.b64encode(raw).decode("ascii")}
+                    )
+            if len(files_out) < 3:
+                sio.emit(
+                    "dl_model_fetch_done",
+                    {
+                        "request_id": request_id,
+                        "success": False,
+                        "error": "model.json / weights / manifest 중 일부가 없습니다.",
+                    },
+                )
+                return
+            sio.emit(
+                "dl_model_fetch_done",
+                {"request_id": request_id, "success": True, "files": files_out},
+            )
+        except Exception as e:
+            sio.emit(
+                "dl_model_fetch_done",
+                {"request_id": request_id, "success": False, "error": str(e)},
             )

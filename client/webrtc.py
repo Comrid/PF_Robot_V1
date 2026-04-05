@@ -43,8 +43,10 @@ class WebRTC_Manager:
     def __init__(self, connection: RTCPeerConnection):
         self.connection: RTCPeerConnection = connection
         self.data_channel: RTCDataChannel | None = None
+        self.dl_result_channel: RTCDataChannel | None = None
         self.candidate_queue: list = []
         self.remote_description_set: bool = False
+        self.system_info_started: bool = False
 
 
 webrtc_loop = asyncio.new_event_loop()
@@ -242,6 +244,31 @@ async def handle_webrtc_offer(session_id, offer_dict):
 
         @pc.on("datachannel")
         def on_datachannel(channel: RTCDataChannel):
+            label = getattr(channel, "label", "") or ""
+
+            if label == "pfDlResult":
+                webrtc_sessions[session_id].dl_result_channel = channel
+
+                @channel.on("message")
+                def on_dl_result_message(message):
+                    try:
+                        if isinstance(message, bytes):
+                            message = message.decode("utf-8")
+                        data = json.loads(message)
+                        if data.get("type") != "dl_inference_result":
+                            return
+                        payload = data.get("payload")
+                        if isinstance(payload, dict):
+                            widget_data.set_dl_inference_result(session_id, payload)
+                    except Exception:
+                        pass
+
+                return
+
+            # 메인 채널: robotData (구버전은 label 빈 문자열)
+            if label not in ("robotData", ""):
+                return
+
             webrtc_sessions[session_id].data_channel = channel
 
             async def system_info_loop():
@@ -256,7 +283,10 @@ async def handle_webrtc_offer(session_id, offer_dict):
                             pass
                     await asyncio.sleep(1.0)
 
-            asyncio.create_task(system_info_loop())
+            sess = webrtc_sessions[session_id]
+            if not sess.system_info_started:
+                sess.system_info_started = True
+                asyncio.create_task(system_info_loop())
 
             @channel.on("message")
             def on_message(message):
