@@ -1,6 +1,8 @@
 /** AP play: Socket.IO joystick + camera + ultrasonic (no WebRTC). */
 (function () {
-    const socket = typeof io !== 'undefined' ? io({ transports: ['websocket', 'polling'] }) : null;
+    const socket = typeof io !== 'undefined'
+        ? io({ transports: ['polling', 'websocket'], reconnection: true, reconnectionAttempts: 8 })
+        : null;
     let controllerRunning = false;
     let isJoystickActive = false;
     let joystickRadius = 100;
@@ -93,12 +95,10 @@
 
     function resizeJoystick() {
         const area = document.getElementById('joystickArea');
-        const container = document.querySelector('.joystick-container');
-        if (!area || !container) return;
-        const size = Math.min(container.clientWidth - 80, container.clientHeight, 280);
-        area.style.width = area.style.height = size + 'px';
+        if (!area) return;
         const rect = area.getBoundingClientRect();
-        joystickRadius = size / 2 - 40;
+        const size = Math.min(rect.width, rect.height);
+        joystickRadius = Math.max(36, size / 2 - 28);
     }
 
     function handleMove(clientX, clientY) {
@@ -109,7 +109,7 @@
         let dx = clientX - cx, dy = clientY - cy;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > joystickRadius) { dx *= joystickRadius / dist; dy *= joystickRadius / dist; }
-        center.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+        center.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
         currentX = dx / joystickRadius;
         currentY = -dy / joystickRadius;
         sendJoystickCommand(currentX, currentY);
@@ -118,13 +118,20 @@
     function resetStick() {
         const center = document.getElementById('joystickCenter');
         center.classList.remove('active');
-        center.style.transform = 'translate(0,0)';
+        center.style.transform = 'translate(-50%, -50%)';
         currentX = currentY = 0;
         sendJoystickCommand(0, 0);
     }
 
     function toggleController() {
-        if (!socket) { alert('Socket.IO 연결 실패'); return; }
+        if (typeof io === 'undefined') {
+            alert('Socket.IO 스크립트를 불러오지 못했습니다. 페이지를 새로고침해 주세요.');
+            return;
+        }
+        if (!socket || !socket.connected) {
+            alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해 주세요.');
+            return;
+        }
         const btn = document.getElementById('joystickToggleBtn');
         const txt = document.getElementById('joystickToggleText');
         if (!controllerRunning) {
@@ -145,11 +152,31 @@
     }
 
     if (socket) {
+        socket.on('connect', function () {
+            const hint = document.getElementById('imageBoxText');
+            if (hint && !controllerRunning) hint.textContent = '시작을 누르면 화면이 표시됩니다';
+        });
+        socket.on('connect_error', function () {
+            console.warn('AP play: socket connect_error');
+        });
         socket.on('ap_play_status', function (d) {
-            if (!d.running && d.error) alert(d.error);
+            if (!d.running) {
+                controllerRunning = false;
+                const btn = document.getElementById('joystickToggleBtn');
+                const txt = document.getElementById('joystickToggleText');
+                if (btn) btn.classList.remove('active');
+                if (txt) txt.textContent = '시작';
+                stopCommandInterval();
+                resetStick();
+                if (d.error) alert(d.error);
+            }
         });
         socket.on('ap_camera_frame', function (d) { if (d && d.jpeg) updateCamera(d.jpeg); });
         socket.on('ap_ultrasonic', function (d) { if (d && d.value != null) updateUltrasonic(d.value); });
+        socket.on('disconnect', function () {
+            controllerRunning = false;
+            stopCommandInterval();
+        });
     }
 
     document.addEventListener('DOMContentLoaded', function () {
