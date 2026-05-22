@@ -61,7 +61,7 @@ def _loop() -> None:
                 except Exception:
                     pass
             frame_skip += 1
-            if frame_skip >= 3 and camera and not mock:
+            if frame_skip >= 1 and camera and not mock:
                 frame_skip = 0
                 try:
                     frame = camera.get_frame()
