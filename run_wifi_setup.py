@@ -4,10 +4,10 @@ from findee._oled_shared import init_early, start_buffering_animation
 init_early()
 start_buffering_animation()
 
-from wifi_setup.app import app
+from wifi_setup.app import app, socketio
 
 if __name__ == "__main__":
     from wifi_setup.app import get_default_robot_name
     from wifi_setup import oled
     oled.show_qr_on_oled(get_default_robot_name)
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)

@@ -6,8 +6,10 @@ import time
 import threading
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask_socketio import SocketIO
 
-from wifi_setup import oled
+from wifi_setup import ap_hardware, oled
+from wifi_setup.ap_socketio import register as register_ap_socketio
 
 
 def get_default_robot_name():
@@ -45,11 +47,18 @@ def _write_robot_config(robot_id: str, robot_name: str) -> None:
 
 
 app = Flask(__name__)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+register_ap_socketio(socketio)
 
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/play")
+def play():
+    return render_template("play.html", robot_name=get_default_robot_name())
 
 
 @app.route("/robot-name")
@@ -82,6 +91,7 @@ def connect():
             return jsonify({"success": False, "error": "WiFi 비밀번호는 8자 이상, 63자 이하여야 합니다."}), 400
 
         if platform.system() == "Linux":
+            ap_hardware.stop_session()
             try:
                 PROFILE_NAME = "Pathfinder-Client"
                 subprocess.run(["sudo", "nmcli", "connection", "delete", PROFILE_NAME], capture_output=True)
@@ -132,4 +142,4 @@ def connect():
 
 if __name__ == "__main__":
     oled.show_qr_on_oled(get_default_robot_name)
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
